@@ -1,12 +1,11 @@
 package main
 
 import (
+	"flag"
 	"html/template"
 	"log"
 	"net/http"
 	"strings"
-
-	"github.com/namsral/flag"
 )
 
 var (
