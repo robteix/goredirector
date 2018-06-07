@@ -1,7 +1,7 @@
 FROM golang:1.10 as build-env
 
 WORKDIR /go/src/goredirector
-ADD main.go /go/src/goredirector
+ADD . /go/src/goredirector
 
 RUN go build
 
