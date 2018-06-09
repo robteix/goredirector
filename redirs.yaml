@@ -1,0 +1,6 @@
+domain: go.rselbach.com
+
+paths:
+  /goredirector:
+    repo: https://github.com/rselbach/goredirector
+
