@@ -1,6 +1,7 @@
-domain: go.rselbach.com
+domain: go.rst.sh
 
 paths:
   /goredirector:
     repo: https://github.com/rselbach/goredirector
-
+  /protoconv:
+    repo: https://github.com/rselbach/protoconv
