@@ -12,7 +12,7 @@ import (
 
 type handler struct {
 	domain string
-	redirs redirectList
+	redirs redirects
 }
 
 func newHandler(yf []byte) (*handler, error) {
@@ -32,7 +32,7 @@ func newHandler(yf []byte) (*handler, error) {
 
 	for path, redir := range data.Redirects {
 		r := redirect{
-			path:   path,
+			Path:   path,
 			vcs:    redir.VCS,
 			repo:   redir.Repo,
 			source: redir.Source,
@@ -51,7 +51,17 @@ func newHandler(yf []byte) (*handler, error) {
 
 func (h handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	path := r.URL.Path
-	redir, pkg := h.redirs.find(path)
+	if path == "/" {
+		data := struct {
+			Domain string
+			Redirs redirects
+		}{h.domain, h.redirs}
+		if err := indexTmpl.Execute(w, data); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+		return
+	}
+	redir, pkg := h.findRedir(path)
 	if redir == nil {
 		http.Error(w, fmt.Sprintf("path %s not found", path), http.StatusNotFound)
 		return
@@ -69,40 +79,39 @@ func (h handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		GoSource:   redir.source,
 	}
 
-	if err := tmpl.Execute(w, data); err != nil {
-		http.Error(w, err.Error(), 500)
+	if err := pkgTmpl.Execute(w, data); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 }
 
-type redirectList []redirect
-
-type redirect struct {
-	path   string
-	vcs    string
-	repo   string
-	source string
-}
-
-func (rl redirectList) Len() int           { return len(rl) }
-func (rl redirectList) Swap(i, j int)      { rl[i], rl[j] = rl[j], rl[i] }
-func (rl redirectList) Less(i, j int) bool { return rl[i].path < rl[j].path }
-
-func (rl redirectList) find(path string) (r *redirect, subpath string) {
-	i := sort.Search(len(rl), func(i int) bool {
-		return rl[i].path >= path
+func (h handler) findRedir(path string) (r *redirect, subpath string) {
+	i := sort.Search(len(h.redirs), func(i int) bool {
+		return h.redirs[i].Path >= path
 	})
-	if i < len(rl) && rl[i].path == path {
-		return &rl[i], ""
+	if i < len(h.redirs) && h.redirs[i].Path == path {
+		return &h.redirs[i], ""
 	}
-	if i > 0 && strings.HasPrefix(path, rl[i-1].path+"/") {
-		return &rl[i-1], path[len(rl[i-1].path)+1:]
+	if i > 0 && strings.HasPrefix(path, h.redirs[i-1].Path+"/") {
+		return &h.redirs[i-1], path[len(h.redirs[i-1].Path)+1:]
 	}
 
 	return nil, ""
 }
 
-var tmpl = template.Must(template.New("main").Parse(`<!DOCTYPE html>
+type redirect struct {
+	Path   string // exported so we can use it in the index template
+	vcs    string
+	repo   string
+	source string
+}
+type redirects []redirect
+
+func (rl redirects) Len() int           { return len(rl) }
+func (rl redirects) Swap(i, j int)      { rl[i], rl[j] = rl[j], rl[i] }
+func (rl redirects) Less(i, j int) bool { return rl[i].Path < rl[j].Path }
+
+var pkgTmpl = template.Must(template.New("main").Parse(`<!DOCTYPE html>
 <html>
 <head>
 <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
@@ -115,3 +124,15 @@ Redirecting to <a href="https://godoc.org/{{.ImportRoot}}{{.PkgPath}}">godoc.org
 </body>
 </html>
 `))
+
+var indexTmpl = template.Must(template.New("index").Parse(`<!DOCTYPE html>
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+</head>
+<body>
+<p>This host is a redirector for the following packages:</p>
+<ul>
+{{range .Redirs}}<li><a href="{{.Path}}">{{$.Domain}}{{.Path}}</a></li>{{end}}
+</ul>
+</body>`))
